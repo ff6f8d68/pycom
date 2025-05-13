@@ -39,8 +39,16 @@ end)
         -- 5. Replace Python len() with Lua # (length operator)
         luaLine = luaLine:gsub("len%(([%w_]+)%)", "#%1")
 
-        -- 6. Replace Python lambda with Lua function
-        luaLine = luaLine:gsub("lambda%s*(.-)%s*:%s*(.-)", "function(%1) %2 end")
+       -- Handle lambda with no arguments: lambda: gui.redraw()
+luaLine = luaLine:gsub("lambda%s*:%s*([%w_%.%(%)%[%]%s]+)", function(expr)
+    return "function() " .. expr .. " end"
+end)
+
+-- Handle lambda with arguments: lambda x: do_something(x)
+luaLine = luaLine:gsub("lambda%s+([%w_,%s]-)%s*:%s*([%w_%.%(%)%[%]%s]+)", function(args, expr)
+    return "function(" .. args .. ") " .. expr .. " end"
+end)
+
 
         -- 7. Handle function definitions (Python: def func(): -> Lua: function func())
         luaLine = luaLine:gsub("^def%s+([%w_]+)%((.-)%)%s*:", "function %1(%2)")
