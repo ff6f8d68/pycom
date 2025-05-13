@@ -10,7 +10,12 @@ function transpile.toLua(code)
         local luaLine = trimmed
 
         -- Import handling
-        luaLine = luaLine:gsub("^import ([%w_]+)", "local %1 = require('plib.%1')")
+        -- Handle "import gui" -> "local gui = require('plib.gui')"
+luaLine = luaLine:gsub("^import%s+([%w_]+)", "local %1 = require('plib.%1')")
+
+-- Handle "from gui import button" -> "local button = require('plib.gui').button"
+luaLine = luaLine:gsub("^from%s+([%w_]+)%s+import%s+([%w_]+)", "local %2 = require('plib.%1').%2")
+
 
         -- Function
         luaLine = luaLine:gsub("^def ([%w_]+)%((.-)%)%s*:", "function %1(%2)")
