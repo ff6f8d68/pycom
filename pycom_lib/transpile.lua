@@ -9,15 +9,19 @@ function transpile.toLua(code)
         local trimmed = line:match("^%s*(.-)%s*$")
         local luaLine = trimmed
 
+        -- Handle Python comments
+        luaLine = luaLine:gsub("^%s*#(.*)", "-- %1")
+
+        -- Handle lists (Python arrays) -> Lua tables
+        luaLine = luaLine:gsub("^%s*%[(.*)%]$", function(list)
+            return "{" .. list:gsub(",", ", ") .. "}"
+        end)
+
         -- Import handling
-        -- Handle "import gui" -> "local gui = require('plib.gui')"
-luaLine = luaLine:gsub("^import%s+([%w_]+)", "local %1 = require('plib.%1')")
+        luaLine = luaLine:gsub("^import%s+([%w_]+)", "local %1 = require('plib.%1')")
+        luaLine = luaLine:gsub("^from%s+([%w_]+)%s+import%s+([%w_]+)", "local %2 = require('plib.%1').%2")
 
--- Handle "from gui import button" -> "local button = require('plib.gui').button"
-luaLine = luaLine:gsub("^from%s+([%w_]+)%s+import%s+([%w_]+)", "local %2 = require('plib.%1').%2")
-
-
-        -- Function
+        -- Function definitions
         luaLine = luaLine:gsub("^def ([%w_]+)%((.-)%)%s*:", "function %1(%2)")
 
         -- If / Else
@@ -28,6 +32,15 @@ luaLine = luaLine:gsub("^from%s+([%w_]+)%s+import%s+([%w_]+)", "local %2 = requi
         -- For loops with range
         luaLine = luaLine:gsub("^for ([%w_]+) in range%((.-),(.-)%)%s*:", "for %1 = %2, %3 do")
         luaLine = luaLine:gsub("^for ([%w_]+) in range%((.-)%)%s*:", "for %1 = 1, %2 do")
+
+        -- For loop (simple iteration) -> Lua for loop
+        luaLine = luaLine:gsub("^for ([%w_]+) in (.*)%s*:", "for %1 in pairs(%2) do")
+
+        -- Handle assignment
+        luaLine = luaLine:gsub("^([%w_]+)%s*=%s*(.-)$", "%1 = %2")
+
+        -- Handle return statements
+        luaLine = luaLine:gsub("^return%s+(.*)", "return %1")
 
         table.insert(lines, luaLine)
 
