@@ -5,15 +5,9 @@ function transpile.toLua(code)
     local indentStack = {}
 
     for line in code:gmatch("[^\r\n]+") do
-        local rawIndent = line:match("^(%s*)") or ""
+        local Indent = line:match("^(%s*)") or ""
         local trimmed = line:match("^%s*(.-)%s*$")
         local luaLine = trimmed
-
-        local indentLevel = #rawIndent
-
-        -- Normalize indentation to levels (every 4 spaces = 1 level)
-        local level = math.floor(indentLevel / 4)
-
         -- Handle Python comments
         -- 1. Replace Python booleans (True -> true)
         luaLine = luaLine:gsub("True", "true")
