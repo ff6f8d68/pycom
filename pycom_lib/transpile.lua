@@ -8,6 +8,21 @@ function transpile.toLua(code)
         local indent = line:match("^(%s*)")
         local trimmed = line:match("^%s*(.-)%s*$")
         local luaLine = trimmed
+        -- Handle: import gui  → local gui = require('plib.gui')
+luaLine = luaLine:gsub("^import%s+([%w_%.]+)", function(lib)
+    local var = lib:match("([%w_]+)$")  -- take last part as variable name
+    return "local " .. var .. " = require('plib." .. lib .. "')"
+end)
+
+-- Handle: from gui import button, window
+luaLine = luaLine:gsub("^from%s+([%w_%.]+)%s+import%s+(.+)", function(lib, items)
+    local output = {}
+    for item in items:gmatch("[^,%s]+") do
+        table.insert(output, "local " .. item .. " = require('plib." .. lib .. "')." .. item)
+    end
+    return table.concat(output, "\n")
+end)
+
 
         -- 1. Replace Python booleans (True -> true)
         luaLine = luaLine:gsub("True", "true")
