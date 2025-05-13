@@ -12,6 +12,12 @@ function transpile.toLua(code)
         -- Handle Python comments
         luaLine = luaLine:gsub("^%s*#(.*)", "-- %1")
 
+        luaLine = luaLine:gsub("^%s*%[(.-)%]$", function(list)
+    -- Lua tables are enclosed in {}
+    return "{" .. list:gsub(",", ", ") .. "}"
+end)
+
+
         -- Handle lists (Python arrays) -> Lua tables
         luaLine = luaLine:gsub("^%s*%[(.*)%]$", function(list)
             return "{" .. list:gsub(",", ", ") .. "}"
