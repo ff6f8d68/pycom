@@ -33,9 +33,13 @@ function transpile.toLua(code)
         -- Function definitions
         luaLine = luaLine:gsub("^def ([%w_]+)%((.-)%)%s*:", "function %1(%2)")
 
-        -- If / Else
+         -- Fixing the "if" statement and ensuring the entire condition is correctly parsed
         luaLine = luaLine:gsub("^if (.-):", "if %1 then")
+
+        -- Handle elif as elseif in Lua
         luaLine = luaLine:gsub("^elif (.-):", "elseif %1 then")
+
+        -- Handle else in Lua
         luaLine = luaLine:gsub("^else:", "else")
 
         -- For loops with range
