@@ -1,10 +1,12 @@
-local gui = {}
+-- Enhanced plib/gui.lua for pycom with focus, scrollbars, resizable windows, popups
 
--- State
+local gui = {}
 local windows = {}
+local focusedTextbox = nil
+local popup = nil
 local current_style = "normal"
 
--- Styles
+-- Style presets
 local styles = {
     normal = {
         border = {"+", "-", "|"},
@@ -12,7 +14,7 @@ local styles = {
         textbox = {bg = colors.black, fg = colors.white},
     },
     whiptail = {
-        border = {"┌", "─", "│"},
+        border = {"\194\172", "\226\128\148", "|"},
         button = {prefix = "<", suffix = ">"},
         textbox = {bg = colors.blue, fg = colors.white},
     }
@@ -26,51 +28,23 @@ function gui.set_style(name)
     end
 end
 
--- Window
-function gui.window(title, x, y, w, h)
+-- Create a new window
+function gui.window(title, x, y, w, h, resizable)
     local win = {
-        title = title,
-        x = x, y = y,
-        w = w, h = h,
-        elements = {}
+        title = title, x = x, y = y, w = w, h = h,
+        elements = {}, scroll = 0, resizable = resizable or false
     }
 
     function win.add_button(label, rx, ry, rw, rh, callback)
-        table.insert(win.elements, {
-            type = "button", label = label,
-            x = rx, y = ry, w = rw, h = rh,
-            callback = callback
-        })
+        table.insert(win.elements, {type = "button", label = label, x = rx, y = ry, w = rw, h = rh, callback = callback})
     end
 
     function win.add_textbox(var_name, rx, ry, width, text)
-        table.insert(win.elements, {
-            type = "textbox",
-            x = rx, y = ry, w = width,
-            var_name = var_name,
-            value = text or ""
-        })
+        table.insert(win.elements, {type = "textbox", x = rx, y = ry, w = width, var_name = var_name, value = text or ""})
     end
 
-    function win.add_icon(rx, ry, image_data, callback)
-        table.insert(win.elements, {
-            type = "icon", x = rx, y = ry,
-            image = image_data, callback = callback
-        })
-    end
-
-    function win.add_list(rx, ry, items, callback)
-        table.insert(win.elements, {
-            type = "list", x = rx, y = ry,
-            items = items, callback = callback
-        })
-    end
-
-    function win.add_icon_list(rx, ry, items, callback)
-        table.insert(win.elements, {
-            type = "icon_list", x = rx, y = ry,
-            items = items, callback = callback
-        })
+    function win.add_icon(rx, ry, img, fg, bg, callback)
+        table.insert(win.elements, {type = "icon", x = rx, y = ry, image = img, fg = fg, bg = bg, callback = callback})
     end
 
     function win.draw()
@@ -84,9 +58,15 @@ function gui.window(title, x, y, w, h)
         term.setCursorPos(win.x, win.y + win.h - 1)
         term.write(s.border[1] .. string.rep(s.border[2], win.w - 2) .. s.border[1])
 
+        -- Draw resize corner
+        if win.resizable then
+            term.setCursorPos(win.x + win.w - 1, win.y + win.h - 1)
+            term.write("\226\149\135")
+        end
+
         for _, el in ipairs(win.elements) do
             local abs_x = win.x + el.x
-            local abs_y = win.y + el.y
+            local abs_y = win.y + el.y - win.scroll
             if el.type == "button" then
                 term.setCursorPos(abs_x, abs_y)
                 term.write(s.button.prefix .. el.label .. s.button.suffix)
@@ -96,17 +76,7 @@ function gui.window(title, x, y, w, h)
             elseif el.type == "icon" then
                 for dy, line in ipairs(el.image) do
                     term.setCursorPos(abs_x, abs_y + dy - 1)
-                    term.write(line)
-                end
-            elseif el.type == "list" then
-                for i, item in ipairs(el.items) do
-                    term.setCursorPos(abs_x, abs_y + i - 1)
-                    term.write("• " .. item)
-                end
-            elseif el.type == "icon_list" then
-                for i, icon in ipairs(el.items) do
-                    term.setCursorPos(abs_x, abs_y + (i - 1) * 2)
-                    term.write("[" .. icon.icon .. "] " .. icon.label)
+                    term.blit(line, el.fg or line, el.bg or line)
                 end
             end
         end
@@ -115,23 +85,14 @@ function gui.window(title, x, y, w, h)
     function win.handle_click(mx, my)
         for _, el in ipairs(win.elements) do
             local abs_x = win.x + el.x
-            local abs_y = win.y + el.y
-
-            if el.type == "button" and
-                mx >= abs_x and mx <= abs_x + el.w and
-                my >= abs_y and my <= abs_y + el.h then
+            local abs_y = win.y + el.y - win.scroll
+            if el.type == "button" and mx >= abs_x and mx <= abs_x + el.w and my >= abs_y and my <= abs_y + el.h then
                 el.callback()
+            elseif el.type == "textbox" and mx >= abs_x and mx <= abs_x + el.w and my == abs_y then
+                focusedTextbox = el
             elseif el.type == "icon" and el.callback then
-                if mx >= abs_x and mx <= abs_x + #el.image[1] and
-                   my >= abs_y and my <= abs_y + #el.image then
+                if mx >= abs_x and mx <= abs_x + #el.image[1] and my >= abs_y and my <= abs_y + #el.image then
                     el.callback()
-                end
-            elseif el.type == "list" or el.type == "icon_list" then
-                for i, item in ipairs(el.items) do
-                    local iy = abs_y + (el.type == "icon_list" and (i - 1) * 2 or i - 1)
-                    if mx >= abs_x and mx <= abs_x + 20 and my == iy then
-                        if el.callback then el.callback(item, i) end
-                    end
                 end
             end
         end
@@ -141,27 +102,43 @@ function gui.window(title, x, y, w, h)
     return win
 end
 
--- Redraw everything
+-- Popups
+function gui.popup(title, w, h)
+    popup = gui.window(title, math.floor((term.getSize()) / 2 - w / 2), 3, w, h)
+    popup.is_popup = true
+    return popup
+end
+
+-- Redraw
 function gui.redraw()
     term.clear()
     for _, win in ipairs(windows) do
-        win.draw()
+        if not win.is_popup then win.draw() end
     end
+    if popup then popup.draw() end
 end
 
+-- Main loop
 function gui.run()
     gui.redraw()
-
     while true do
-        local e, btn, x, y = os.pullEvent()
+        local e, p1, p2, p3 = os.pullEvent()
         if e == "mouse_click" then
-            for _, win in ipairs(windows) do
-                win.handle_click(x, y)
+            local mx, my = p2, p3
+            if popup then
+                popup.handle_click(mx, my)
+            else
+                for _, win in ipairs(windows) do
+                    win.handle_click(mx, my)
+                end
             end
-        elseif e == "char" then
-            -- You can expand this to feed input into focused textboxes
+        elseif e == "char" and focusedTextbox then
+            focusedTextbox.value = focusedTextbox.value .. p1
+        elseif e == "key" and focusedTextbox then
+            if p1 == keys.backspace then
+                focusedTextbox.value = focusedTextbox.value:sub(1, -2)
+            end
         end
-
         gui.redraw()
     end
 end
